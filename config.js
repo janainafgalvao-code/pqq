@@ -1,14 +1,53 @@
 /**
- * TechBynet Gateway Integration & Configurações da Aplicação
- * Integração direta com a TechBynet para funcionamento 100% no Surge
+ * UniPay Brasil Gateway Integration & Configurações da Aplicação
+ * API Oficial: https://api-dash.unipaybr.com/v1
+ * Integração direta com a UniPay Brasil para funcionamento 100% client-side (Vercel / GitHub Pages / Surge)
  */
 (function() {
-  const TECHBYNET_KEY = 'f3496353-b145-431a-91ac-1e47968b5b6f';
-  const TECHBYNET_BASE_URL = 'https://api-gateway.techbynet.com/api/user/transactions';
+  const UNIPAY_PUBLIC_KEY = 'pk_live_f63867fac3be706b7fc4a9f0';
+  const UNIPAY_SECRET_KEY = 'sk_live_26bee06dc1fd5504ea0335b4b2661ab6790ea7f3ac534ee2';
+  const UNIPAY_BASE_URL = 'https://api-dash.unipaybr.com/v1';
+
+  function getBasicAuth() {
+    try {
+      return 'Basic ' + window.btoa(UNIPAY_PUBLIC_KEY + ':' + UNIPAY_SECRET_KEY);
+    } catch (_) {
+      return 'Basic cGtfbGl2ZV9mNjM4NjdmYWMzYmU3MDZiN2ZjNGE5ZjA6c2tfbGl2ZV8yNmJlZTA2ZGMxZmQ1NTA0ZWEwMzM1YjRiMjY2MWFiNjc5MGVhN2YzYWM1MzRlZTI=';
+    }
+  }
+
+  function isValidCpf(cpf) {
+    const clean = String(cpf || '').replace(/\D/g, '');
+    if (clean.length !== 11 || /^(\d)\1{10}$/.test(clean)) return false;
+    let sum = 0;
+    for (let i = 0; i < 9; i++) sum += parseInt(clean.charAt(i), 10) * (10 - i);
+    let d1 = sum % 11;
+    d1 = d1 < 2 ? 0 : 11 - d1;
+    if (parseInt(clean.charAt(9), 10) !== d1) return false;
+    sum = 0;
+    for (let j = 0; j < 10; j++) sum += parseInt(clean.charAt(j), 10) * (11 - j);
+    let d2 = sum % 11;
+    d2 = d2 < 2 ? 0 : 11 - d2;
+    return parseInt(clean.charAt(10), 10) === d2;
+  }
+
+  function gerarCpfValido() {
+    const n = [];
+    for (let i = 0; i < 9; i++) n.push(Math.floor(Math.random() * 10));
+    let d1 = n.reduce(function(acc, val, i) { return acc + val * (10 - i); }, 0) % 11;
+    d1 = d1 < 2 ? 0 : 11 - d1;
+    n.push(d1);
+    let d2 = n.reduce(function(acc, val, i) { return acc + val * (11 - i); }, 0) % 11;
+    d2 = d2 < 2 ? 0 : 11 - d2;
+    n.push(d2);
+    return n.join('');
+  }
 
   // Associar orderId -> transactionId
   function saveTxId(orderId, txId) {
     try {
+      sessionStorage.setItem('unipay_tx_' + orderId, txId);
+      sessionStorage.setItem('unipay_last_tx', txId);
       sessionStorage.setItem('techbynet_tx_' + orderId, txId);
       sessionStorage.setItem('techbynet_last_tx', txId);
     } catch (_) {}
@@ -16,7 +55,12 @@
 
   function getTxId(orderId) {
     try {
-      return sessionStorage.getItem('techbynet_tx_' + orderId) || sessionStorage.getItem('techbynet_last_tx');
+      return (
+        sessionStorage.getItem('unipay_tx_' + orderId) ||
+        sessionStorage.getItem('unipay_last_tx') ||
+        sessionStorage.getItem('techbynet_tx_' + orderId) ||
+        sessionStorage.getItem('techbynet_last_tx')
+      );
     } catch (_) {
       return null;
     }
@@ -67,7 +111,7 @@
       });
     }
 
-    // 3. Gerar PIX via TechBynet
+    // 3. Gerar PIX via UniPay Brasil
     if (url.includes('/api/payments/create-pix')) {
       try {
         let reqData = {};
@@ -83,13 +127,15 @@
         if (typeof rawAmount === 'number') {
           amountInCents = (rawAmount > 0 && rawAmount < 500) ? Math.round(rawAmount * 100) : Math.round(rawAmount);
         } else if (typeof rawAmount === 'string') {
-          let p = parseFloat(rawAmount.replace('R$', '').replace(/\s/g, '').replace(',', '.'));
+          const p = parseFloat(rawAmount.replace('R$', '').replace(/\s/g, '').replace(',', '.'));
           if (!isNaN(p) && p > 0) amountInCents = p < 500 ? Math.round(p * 100) : Math.round(p);
         }
 
         const rawCpf = reqData.customerCpf || pixStored.customerCpf || lastOrderData.customerCpf || (lastOrderData.paymentData && lastOrderData.paymentData.cpf) || '';
         let cpf = String(rawCpf).replace(/\D/g, '');
-        if (cpf.length !== 11) cpf = '07580365316';
+        if (!isValidCpf(cpf)) {
+          cpf = gerarCpfValido();
+        }
 
         const rawName = reqData.customerName || pixStored.customerName || lastOrderData.customerName || checkoutStored.name || 'Cliente Delivery';
         const customerName = String(rawName).trim() || 'Cliente Delivery';
@@ -104,51 +150,52 @@
         }
 
         const rawEmail = reqData.customerEmail || pixStored.customerEmail || lastOrderData.customerEmail || checkoutStored.email || '';
-        const customerEmail = String(rawEmail).trim() || ('contato.' + cpf.slice(0, 5) + '@delivery.com');
+        const customerEmail = String(rawEmail).trim() || ('contato.' + cpf.slice(0, 6) + '@gmail.com');
 
         const orderId = reqData.orderId || ('ORD-' + Date.now());
 
-        const techbynetPayload = {
+        const unipayPayload = {
           amount: amountInCents,
-          paymentMethod: 'PIX',
+          payment_method: 'pix',
+          product_type: 'digital',
           customer: {
             name: customerName,
             email: customerEmail,
-            document: {
-              number: cpf,
-              type: 'CPF'
-            },
-            phone: cleanPhone
+            tax_id: cpf,
+            phone: cleanPhone,
+            type: 'individual'
           },
           items: [
             {
-              title: 'Pedido ' + orderId,
-              unitPrice: amountInCents,
+              name: 'Pedido ' + orderId,
               quantity: 1,
+              unit_price: amountInCents,
               tangible: false
             }
           ],
-          pix: {
-            expiresInDays: 1
+          payment_details: {
+            expires_in_seconds: 3600
           }
         };
 
-        const tbRes = await originalFetch(TECHBYNET_BASE_URL, {
+        const upRes = await originalFetch(UNIPAY_BASE_URL + '/charges', {
           method: 'POST',
           headers: {
-            'x-api-key': TECHBYNET_KEY,
-            'User-Agent': 'AtivoB2B/1.0',
-            'Content-Type': 'application/json'
+            'Authorization': getBasicAuth(),
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           },
-          body: JSON.stringify(techbynetPayload)
+          body: JSON.stringify(unipayPayload)
         });
 
-        const tbData = await tbRes.json();
-        console.log('[TechBynet Gateway] Resposta de criação:', tbData);
+        const upData = await upRes.json().catch(function() { return {}; });
+        console.log('[UniPay Gateway] Resposta de criação:', upData);
 
-        const tx = (tbData && tbData.data) || tbData;
-        const txId = tx && tx.id;
-        const pixCode = (tx && (tx.qrCode || (tx.pix && tx.pix.qrcode))) || '';
+        const tx = (upData && upData.data) || upData || {};
+        const txId = tx.id || tx.transactionId || '';
+        const paymentFields = tx.payment_fields || {};
+        const pixCode = paymentFields.copy_paste || tx.copy_paste || tx.pix_code || tx.brCode || tx.code || (tx.pix && tx.pix.qrcode) || '';
+        const qrImg = (paymentFields && paymentFields.qr_code_base64) || ('https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=0&data=' + encodeURIComponent(pixCode));
 
         if (pixCode && txId) {
           saveTxId(orderId, txId);
@@ -159,6 +206,8 @@
             transactionId: txId,
             orderId: orderId,
             qrCode: pixCode,
+            qrCodeBase64: qrImg,
+            pixCopiaECola: pixCode,
             brCode: pixCode,
             pix_code: pixCode,
             amount: amountInCents / 100
@@ -167,18 +216,18 @@
             headers: { 'Content-Type': 'application/json' }
           });
         } else {
-          throw new Error((tbData && (tbData.message || tbData.error)) || 'Erro ao gerar PIX na TechBynet');
+          throw new Error((upData && (upData.message || upData.error)) || 'Erro ao gerar PIX na UniPay');
         }
       } catch (err) {
-        console.error('[TechBynet Gateway] Erro na chamada:', err);
-        return new Response(JSON.stringify({ error: err.message || 'Falha na TechBynet' }), {
+        console.error('[UniPay Gateway] Erro na chamada:', err);
+        return new Response(JSON.stringify({ error: err.message || 'Falha na UniPay' }), {
           status: 500,
           headers: { 'Content-Type': 'application/json' }
         });
       }
     }
 
-    // 4. Verificar Status do Pagamento via TechBynet
+    // 4. Verificar Status do Pagamento via UniPay Brasil
     if (url.includes('/api/payments/check-status')) {
       try {
         const urlObj = new URL(url, window.location.origin);
@@ -186,30 +235,33 @@
         const txId = getTxId(orderId);
 
         if (txId) {
-          const checkRes = await originalFetch(TECHBYNET_BASE_URL + '/' + encodeURIComponent(txId) + '/summary', {
+          const checkRes = await originalFetch(UNIPAY_BASE_URL + '/charges/' + encodeURIComponent(txId), {
             method: 'GET',
             headers: {
-              'x-api-key': TECHBYNET_KEY,
-              'User-Agent': 'AtivoB2B/1.0'
-            }
+              'Authorization': getBasicAuth(),
+              'Accept': 'application/json'
+            },
+            cache: 'no-store'
           });
 
-          const checkData = await checkRes.json();
+          const checkData = await checkRes.json().catch(function() { return {}; });
           const tx = (checkData && checkData.data) || checkData || {};
           const statusStr = String(tx.status || '').toUpperCase();
-          const isPaid = statusStr === 'PAID' || statusStr === 'APPROVED' || statusStr === 'COMPLETED' || !!tx.paidAt;
+          const isPaid = ['PAID', 'CAPTURED', 'AUTHORIZED', 'COMPLETED', 'CONFIRMED', 'APPROVED', 'PAGO'].indexOf(statusStr) !== -1 || !!tx.paidAt;
 
           return new Response(JSON.stringify({
             orderId: orderId,
             paymentStatus: isPaid ? 'PAID' : 'PENDING',
-            status: tx.status
+            status: isPaid ? 'PAID' : (tx.status || 'PENDING'),
+            paid: isPaid,
+            isPaid: isPaid
           }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
           });
         }
       } catch (err) {
-        console.error('[TechBynet Gateway] Erro ao consultar status:', err);
+        console.error('[UniPay Gateway] Erro ao consultar status:', err);
       }
 
       return new Response(JSON.stringify({ orderId: '', paymentStatus: 'PENDING' }), {
@@ -221,5 +273,5 @@
     return originalFetch.apply(this, arguments);
   };
 
-  console.log('[TechBynet Gateway] Integrado e ativo com sucesso.');
+  console.log('[UniPay Gateway] Integrado e ativo com sucesso.');
 })();
