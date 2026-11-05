@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Capivara Entregas | Verificação</title>
+  
+  <link rel="icon" type="image/png" href="logo-capivara.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    :root {
+      --primary-yellow: #f8c102;
+      --bg-yellow: #f6be00;
+      --btn-hover: #e0ac00;
+    }
+
+    body {
+      background-color: var(--bg-yellow);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow-x: hidden;
+      padding: 20px;
+    }
+
+    .bg-shape-top-left {
+      position: fixed;
+      top: -120px;
+      left: -120px;
+      width: 320px;
+      height: 320px;
+      background: radial-gradient(circle, rgba(255, 235, 120, 0.45) 0%, rgba(246, 190, 0, 0) 70%);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .bg-shape-bottom-right {
+      position: fixed;
+      bottom: -150px;
+      right: -150px;
+      width: 480px;
+      height: 480px;
+      border: 45px solid rgba(255, 230, 100, 0.35);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* CARD PRINCIPAL */
+    .flow-card {
+      position: relative;
+      z-index: 10;
+      background: #ffffff;
+      width: 100%;
+      max-width: 440px;
+      border-radius: 26px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.05);
+      padding: 34px 30px 26px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-sizing: border-box;
+      transition: all 0.3s ease;
+    }
+
+    /* ETAPA 1: IDADE +18 */
+    .step-box {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    .accent-bar {
+      width: 46px;
+      height: 4.5px;
+      background-color: var(--primary-yellow);
+      border-radius: 999px;
+      margin-bottom: 20px;
+    }
+
+    .title {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1.3;
+      margin-bottom: 10px;
+      letter-spacing: -0.3px;
+    }
+
+    .subtitle {
+      font-size: 0.94rem;
+      color: #6b7280;
+      margin-bottom: 26px;
+      line-height: 1.4;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 14px;
+      width: 100%;
+      margin-bottom: 22px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 13px 18px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .btn-no {
+      background: #ffffff;
+      border-color: #d1d5db;
+      color: #374151;
+    }
+
+    .btn-no:hover {
+      background-color: #f9fafb;
+    }
+
+    .btn-yes {
+      background-color: var(--primary-yellow);
+      color: #111827;
+      border-color: var(--primary-yellow);
+      box-shadow: 0 2px 4px rgba(246, 190, 0, 0.25);
+    }
+
+    .btn-yes:hover {
+      background-color: var(--btn-hover);
+    }
+
+    .footer-note {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+
+    /* ETAPA 2: CAPIVARA ENTREGAS / CEP */
+    .loc-logo {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    .loc-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: #111827;
+      margin-bottom: 4px;
+    }
+
+    .loc-subtitle {
+      font-size: 0.9rem;
+      color: #6b7280;
+      margin-bottom: 22px;
+    }
+
+    .loc-question {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #1f2937;
+      margin-bottom: 16px;
+    }
+
+    .loc-input-cep {
+      width: 100%;
+      box-sizing: border-box;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 13px 16px;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #475569;
+      text-align: center;
+      letter-spacing: 2px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      margin-bottom: 16px;
+      background: #ffffff;
+    }
+
+    .loc-input-cep:focus {
+      border-color: #ffbe00;
+      box-shadow: 0 0 0 3px rgba(255, 190, 0, 0.2);
+    }
+
+    .loc-input-cep::placeholder {
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+
+    .loc-btn-confirm {
+      width: 100%;
+      background-color: #ffbe00;
+      color: #111827;
+      font-size: 1rem;
+      font-weight: 800;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 18px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(255, 190, 0, 0.3);
+      margin-bottom: 16px;
+    }
+
+    .loc-btn-confirm:hover {
+      background-color: #f0b000;
+      transform: translateY(-1px);
+    }
+
+    .loc-link-skip {
+      font-size: 0.92rem;
+      font-weight: 500;
+      color: #94a3b8;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 6px 14px;
+      transition: color 0.2s ease;
+      text-decoration: none;
+    }
+
+    .loc-link-skip:hover {
+      color: #475569;
+    }
+
+    /* BARRA DE COOKIES */
+    .cookie-banner {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 99;
+      background-color: #1e1e1e;
+      color: #ffffff;
+      padding: 12px 18px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: calc(100% - 40px);
+      max-width: 620px;
+      gap: 16px;
+    }
+
+    .cookie-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.82rem;
+    }
+
+    .cookie-dot {
+      width: 7px;
+      height: 7px;
+      background-color: var(--primary-yellow);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .cookie-btn {
+      background-color: var(--primary-yellow);
+      color: #111827;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 520px) {
+      .flow-card { padding: 28px 20px 22px; border-radius: 22px; }
+      .title { font-size: 1.25rem; }
+      .loc-title { font-size: 1.2rem; }
+      .cookie-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        bottom: 12px;
+        width: calc(100% - 24px);
+      }
+      .cookie-btn { width: 100%; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-shape-top-left"></div>
+  <div class="bg-shape-bottom-right"></div>
+
+  <main class="flow-card">
+    
+    <!-- ETAPA 1: PRESELL +18 -->
+    <div id="step-1" class="step-box">
+      <div class="accent-bar"></div>
+      <h1 class="title">Você tem 18 anos ou mais?</h1>
+      <p class="subtitle">Confirme que você é maior de idade para entrar.</p>
+
+      <div class="button-group">
+        <button type="button" class="btn btn-no" id="btn-no">Não</button>
+        <button type="button" class="btn btn-yes" id="btn-yes">Sim, tenho 18+</button>
+      </div>
+
+      <p class="footer-note">Acesso permitido apenas para maiores de 18 anos</p>
+    </div>
+
+    <!-- ETAPA 2: CAPIVARA ENTREGAS / CEP (OPCIONAL) -->
+    <div id="step-2" class="step-box" style="display: none;">
+      <img src="logo-capivara.png" alt="Capivara Entregas" class="loc-logo" onerror="this.src='favicon.svg'">
+      <h2 class="loc-title">Capivara Entregas</h2>
+      <p class="loc-subtitle">Entrega rápida na sua porta</p>
+
+      <h3 class="loc-question">Qual é o seu CEP?</h3>
+
+      <input type="tel" class="loc-input-cep" id="input-cep" placeholder="00000-000" maxlength="9" autocomplete="postal-code">
+
+      <button type="button" class="loc-btn-confirm" id="btn-confirm-cep">Confirmar localização</button>
+
+      <button type="button" class="loc-link-skip" id="btn-skip">Pular</button>
+    </div>
+
+  </main>
+
+  <aside class="cookie-banner" id="cookie-banner">
+    <div class="cookie-content">
+      <div class="cookie-dot"></div>
+      <div class="cookie-text">
+        <span style="font-weight: 700;">Preferências de cookies</span><br>
+        <span style="color: #d1d5db;">Usamos cookies para melhorar sua navegação. <u style="color: #f8c102;">Política de Privacidade</u></span>
+      </div>
+    </div>
+    <button type="button" class="cookie-btn" id="accept-cookies">Aceitar</button>
+  </aside>
+
+  <script>
+    const CONFIG = {
+      TARGET_URL: "./ze/index.html", // Vai para a loja normal
+      FALLBACK_URL: "https://www.google.com.br",
+      PRESERVE_UTMS: true
+    };
+
+    function goToStore() {
+      let dest = CONFIG.TARGET_URL;
+      if (CONFIG.PRESERVE_UTMS && window.location.search) {
+        const sep = dest.includes('?') ? '&' : '?';
+        dest = dest + sep + window.location.search.replace(/^\?/, '');
+      }
+      window.location.href = dest;
+    }
+
+    const step1 = document.getElementById('step-1');
+    const step2 = document.getElementById('step-2');
+    const btnYes = document.getElementById('btn-yes');
+    const btnNo = document.getElementById('btn-no');
+    const inputCep = document.getElementById('input-cep');
+    const btnConfirmCep = document.getElementById('btn-confirm-cep');
+    const btnSkip = document.getElementById('btn-skip');
+
+    // 1. Clicou em "Sim, tenho 18+" -> Abre a Capivara Entregas (Qual é o seu CEP?)
+    btnYes.addEventListener('click', function(e) {
+      e.preventDefault();
+      step1.style.display = 'none';
+      step2.style.display = 'flex';
+      inputCep.focus();
+    });
+
+    // 2. Clicou em "Não"
+    btnNo.addEventListener('click', function(e) {
+      e.preventDefault();
+      alert("Acesso restrito apenas a pessoas maiores de 18 anos.");
+      window.location.href = CONFIG.FALLBACK_URL;
+    });
+
+    // 3. Máscara automática de CEP
+    inputCep.addEventListener('input', function(e) {
+      let val = e.target.value.replace(/\D/g, '').substring(0, 8);
+      if (val.length > 5) {
+        val = val.substring(0, 5) + '-' + val.substring(5);
+      }
+      e.target.value = val;
+    });
+
+    // 4. Confirmar Localização -> Vai pra loja
+    btnConfirmCep.addEventListener('click', function(e) {
+      e.preventDefault();
+      btnConfirmCep.innerText = 'Validando CEP...';
+      setTimeout(function() {
+        goToStore();
+      }, 350);
+    });
+
+    // 5. Pular (Opcional) -> Vai pra loja direto
+    btnSkip.addEventListener('click', function(e) {
+      e.preventDefault();
+      goToStore();
+    });
+
+    // Cookie banner
+    document.getElementById('accept-cookies').addEventListener('click', function() {
+      document.getElementById('cookie-banner').style.display = 'none';
+    });
+  </script>
+</body>
+</html>
