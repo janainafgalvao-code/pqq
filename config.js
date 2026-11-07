@@ -1,20 +1,15 @@
 /**
- * UniPay Brasil Gateway Integration & Configurações da Aplicação
- * API Oficial: https://api-dash.unipaybr.com/v1
- * Integração direta com a UniPay Brasil para funcionamento 100% client-side (Vercel / GitHub Pages / Surge)
+ * LulaPay Gateway Integration & Configurações da Aplicação
+ * API Oficial: https://lulapay.onrender.com/docs.php
+ * Integração direta e via Vercel Serverless para funcionamento 100% no Vercel (https://www.zeeee.delivery)
  */
 (function() {
-  const UNIPAY_PUBLIC_KEY = 'pk_live_f63867fac3be706b7fc4a9f0';
-  const UNIPAY_SECRET_KEY = 'sk_live_26bee06dc1fd5504ea0335b4b2661ab6790ea7f3ac534ee2';
-  const UNIPAY_BASE_URL = 'https://api-dash.unipaybr.com/v1';
-
-  function getBasicAuth() {
-    try {
-      return 'Basic ' + window.btoa(UNIPAY_PUBLIC_KEY + ':' + UNIPAY_SECRET_KEY);
-    } catch (_) {
-      return 'Basic cGtfbGl2ZV9mNjM4NjdmYWMzYmU3MDZiN2ZjNGE5ZjA6c2tfbGl2ZV8yNmJlZTA2ZGMxZmQ1NTA0ZWEwMzM1YjRiMjY2MWFiNjc5MGVhN2YzYWM1MzRlZTI=';
-    }
-  }
+  const LULAPAY_TOKEN = 'gwk_2e63a451010e3cdf4ddc687ce624d9e9078ff13809d61409';
+  const LULAPAY_ENDPOINTS = [
+    '/api/cobranca',
+    '/api/lulapay/cobranca.php',
+    'https://lulapay.onrender.com/api/v1/cobranca.php'
+  ];
 
   function isValidCpf(cpf) {
     const clean = String(cpf || '').replace(/\D/g, '');
@@ -46,6 +41,8 @@
   // Associar orderId -> transactionId
   function saveTxId(orderId, txId) {
     try {
+      sessionStorage.setItem('lulapay_tx_' + orderId, txId);
+      sessionStorage.setItem('lulapay_last_tx', txId);
       sessionStorage.setItem('unipay_tx_' + orderId, txId);
       sessionStorage.setItem('unipay_last_tx', txId);
       sessionStorage.setItem('techbynet_tx_' + orderId, txId);
@@ -56,6 +53,8 @@
   function getTxId(orderId) {
     try {
       return (
+        sessionStorage.getItem('lulapay_tx_' + orderId) ||
+        sessionStorage.getItem('lulapay_last_tx') ||
         sessionStorage.getItem('unipay_tx_' + orderId) ||
         sessionStorage.getItem('unipay_last_tx') ||
         sessionStorage.getItem('techbynet_tx_' + orderId) ||
@@ -111,7 +110,7 @@
       });
     }
 
-    // 3. Gerar PIX via UniPay Brasil
+    // 3. Gerar PIX via LulaPay
     if (url.includes('/api/payments/create-pix')) {
       try {
         let reqData = {};
@@ -123,13 +122,15 @@
         const checkoutStored = getStoredJson('checkoutData');
 
         const rawAmount = reqData.amount || pixStored.total || lastOrderData.total || 10;
-        let amountInCents = 1000;
+        let amountReais = 10;
         if (typeof rawAmount === 'number') {
-          amountInCents = (rawAmount > 0 && rawAmount < 500) ? Math.round(rawAmount * 100) : Math.round(rawAmount);
+          amountReais = (rawAmount > 500) ? (rawAmount / 100) : rawAmount;
         } else if (typeof rawAmount === 'string') {
           const p = parseFloat(rawAmount.replace('R$', '').replace(/\s/g, '').replace(',', '.'));
-          if (!isNaN(p) && p > 0) amountInCents = p < 500 ? Math.round(p * 100) : Math.round(p);
+          if (!isNaN(p) && p > 0) amountReais = (p > 500) ? (p / 100) : p;
         }
+        amountReais = Math.round(amountReais * 100) / 100;
+        if (amountReais < 1) amountReais = 1;
 
         const rawCpf = reqData.customerCpf || pixStored.customerCpf || lastOrderData.customerCpf || (lastOrderData.paymentData && lastOrderData.paymentData.cpf) || '';
         let cpf = String(rawCpf).replace(/\D/g, '');
@@ -154,50 +155,67 @@
 
         const orderId = reqData.orderId || ('ORD-' + Date.now());
 
-        const unipayPayload = {
-          amount: amountInCents,
-          payment_method: 'pix',
-          product_type: 'digital',
-          customer: {
-            name: customerName,
-            email: customerEmail,
-            tax_id: cpf,
-            phone: cleanPhone,
-            type: 'individual'
-          },
-          items: [
-            {
-              name: 'Pedido ' + orderId,
-              quantity: 1,
-              unit_price: amountInCents,
-              tangible: false
-            }
-          ],
-          payment_details: {
-            expires_in_seconds: 3600
-          }
+        const lulapayPayload = {
+          amount: amountReais,
+          description: 'Pedido ' + orderId,
+          external_id: orderId,
+          customer_name: customerName,
+          customer_email: customerEmail,
+          customer_phone: cleanPhone,
+          customer_document: cpf
         };
 
-        const upRes = await originalFetch(UNIPAY_BASE_URL + '/charges', {
-          method: 'POST',
-          headers: {
-            'Authorization': getBasicAuth(),
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(unipayPayload)
-        });
+        let lulaData = null;
+        let lastError = null;
 
-        const upData = await upRes.json().catch(function() { return {}; });
-        console.log('[UniPay Gateway] Resposta de criação:', upData);
+        // Tentar endpoints disponíveis
+        for (let i = 0; i < LULAPAY_ENDPOINTS.length; i++) {
+          const ep = LULAPAY_ENDPOINTS[i];
+          try {
+            const isLocal = ep.startsWith('/');
+            const headers = {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            };
+            if (!isLocal || ep.includes('/api/lulapay/')) {
+              headers['Authorization'] = 'Bearer ' + LULAPAY_TOKEN;
+            }
 
-        const tx = (upData && upData.data) || upData || {};
-        const txId = tx.id || tx.transactionId || '';
-        const paymentFields = tx.payment_fields || {};
-        const pixCode = paymentFields.copy_paste || tx.copy_paste || tx.pix_code || tx.brCode || tx.code || (tx.pix && tx.pix.qrcode) || '';
-        const qrImg = (paymentFields && paymentFields.qr_code_base64) || ('https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=0&data=' + encodeURIComponent(pixCode));
+            const res = await originalFetch(ep, {
+              method: 'POST',
+              headers: headers,
+              body: JSON.stringify(lulapayPayload)
+            });
 
-        if (pixCode && txId) {
+            if (res.ok) {
+              const parsed = await res.json().catch(function() { return null; });
+              if (parsed && (parsed.id || parsed.pix_code || parsed.brCode)) {
+                lulaData = parsed;
+                break;
+              }
+            } else {
+              const errJson = await res.json().catch(function() { return {}; });
+              lastError = (errJson && (errJson.error || errJson.message)) || ('HTTP ' + res.status);
+            }
+          } catch (err) {
+            lastError = err.message;
+          }
+        }
+
+        console.log('[LulaPay Gateway] Resposta de criação:', lulaData || lastError);
+
+        if (lulaData && (lulaData.id || lulaData.pix_code)) {
+          const txId = lulaData.id || orderId;
+          const pixCode = lulaData.pix_code || lulaData.brCode || lulaData.copy_paste || lulaData.code || '';
+          let qrImg = '';
+          if (lulaData.qr_code_base64) {
+            qrImg = lulaData.qr_code_base64.startsWith('data:')
+              ? lulaData.qr_code_base64
+              : ('data:image/png;base64,' + lulaData.qr_code_base64);
+          } else {
+            qrImg = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=0&data=' + encodeURIComponent(pixCode);
+          }
+
           saveTxId(orderId, txId);
 
           return new Response(JSON.stringify({
@@ -210,24 +228,24 @@
             pixCopiaECola: pixCode,
             brCode: pixCode,
             pix_code: pixCode,
-            amount: amountInCents / 100
+            amount: amountReais
           }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
           });
         } else {
-          throw new Error((upData && (upData.message || upData.error)) || 'Erro ao gerar PIX na UniPay');
+          throw new Error(lastError || 'Erro ao gerar PIX na LulaPay');
         }
       } catch (err) {
-        console.error('[UniPay Gateway] Erro na chamada:', err);
-        return new Response(JSON.stringify({ error: err.message || 'Falha na UniPay' }), {
+        console.error('[LulaPay Gateway] Erro na chamada:', err);
+        return new Response(JSON.stringify({ error: err.message || 'Falha na LulaPay' }), {
           status: 500,
           headers: { 'Content-Type': 'application/json' }
         });
       }
     }
 
-    // 4. Verificar Status do Pagamento via UniPay Brasil
+    // 4. Verificar Status do Pagamento via LulaPay
     if (url.includes('/api/payments/check-status')) {
       try {
         const urlObj = new URL(url, window.location.origin);
@@ -235,24 +253,46 @@
         const txId = getTxId(orderId);
 
         if (txId) {
-          const checkRes = await originalFetch(UNIPAY_BASE_URL + '/charges/' + encodeURIComponent(txId), {
-            method: 'GET',
-            headers: {
-              'Authorization': getBasicAuth(),
-              'Accept': 'application/json'
-            },
-            cache: 'no-store'
-          });
+          let checkData = null;
 
-          const checkData = await checkRes.json().catch(function() { return {}; });
-          const tx = (checkData && checkData.data) || checkData || {};
-          const statusStr = String(tx.status || '').toUpperCase();
-          const isPaid = ['PAID', 'CAPTURED', 'AUTHORIZED', 'COMPLETED', 'CONFIRMED', 'APPROVED', 'PAGO'].indexOf(statusStr) !== -1 || !!tx.paidAt;
+          const checkEndpoints = [
+            '/api/cobranca?id=' + encodeURIComponent(txId),
+            '/api/lulapay/cobranca.php?id=' + encodeURIComponent(txId),
+            'https://lulapay.onrender.com/api/v1/cobranca.php?id=' + encodeURIComponent(txId)
+          ];
+
+          for (let j = 0; j < checkEndpoints.length; j++) {
+            const cEp = checkEndpoints[j];
+            try {
+              const isLocal = cEp.startsWith('/');
+              const headers = { 'Accept': 'application/json' };
+              if (!isLocal || cEp.includes('/api/lulapay/')) {
+                headers['Authorization'] = 'Bearer ' + LULAPAY_TOKEN;
+              }
+
+              const checkRes = await originalFetch(cEp, {
+                method: 'GET',
+                headers: headers,
+                cache: 'no-store'
+              });
+
+              if (checkRes.ok) {
+                const parsed = await checkRes.json().catch(function() { return null; });
+                if (parsed && parsed.status) {
+                  checkData = parsed;
+                  break;
+                }
+              }
+            } catch (_) {}
+          }
+
+          const st = String((checkData && checkData.status) || '').toLowerCase();
+          const isPaid = ['paid', 'pago', 'completed', 'approved', 'confirmed', 'captured'].indexOf(st) !== -1 || !!(checkData && checkData.paid_at);
 
           return new Response(JSON.stringify({
             orderId: orderId,
             paymentStatus: isPaid ? 'PAID' : 'PENDING',
-            status: isPaid ? 'PAID' : (tx.status || 'PENDING'),
+            status: isPaid ? 'PAID' : (st.toUpperCase() || 'PENDING'),
             paid: isPaid,
             isPaid: isPaid
           }), {
@@ -261,7 +301,7 @@
           });
         }
       } catch (err) {
-        console.error('[UniPay Gateway] Erro ao consultar status:', err);
+        console.error('[LulaPay Gateway] Erro ao consultar status:', err);
       }
 
       return new Response(JSON.stringify({ orderId: '', paymentStatus: 'PENDING' }), {
@@ -273,5 +313,5 @@
     return originalFetch.apply(this, arguments);
   };
 
-  console.log('[UniPay Gateway] Integrado e ativo com sucesso.');
+  console.log('[LulaPay Gateway] Integrado e ativo com sucesso.');
 })();
