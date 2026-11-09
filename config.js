@@ -4,7 +4,7 @@
  * Integração direta e via Vercel Serverless para funcionamento 100% no Vercel (https://www.zeeee.delivery)
  */
 (function() {
-  const LULAPAY_TOKEN = 'gwk_2e63a451010e3cdf4ddc687ce624d9e9078ff13809d61409';
+  const LULAPAY_TOKEN = 'gwk_8c48161980d826f31366e244407f21ff41caa3fa1c0c0416';
   const LULAPAY_ENDPOINTS = [
     '/api/cobranca',
     '/api/lulapay/cobranca.php',

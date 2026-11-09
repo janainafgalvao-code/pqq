@@ -1,6 +1,6 @@
 const https = require('https');
 
-const LULAPAY_TOKEN = 'gwk_2e63a451010e3cdf4ddc687ce624d9e9078ff13809d61409';
+const LULAPAY_TOKEN = 'gwk_8c48161980d826f31366e244407f21ff41caa3fa1c0c0416';
 const LULAPAY_HOST = 'lulapay.onrender.com';
 
 module.exports = async (req, res) => {
@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
       path: path,
       method: method,
       headers: {
-        'Authorization': 'Bearer ' + LULAPAY_TOKEN,
+        'Authorization': '((req.headers['authorization'] || req.headers['Authorization']) || ('Bearer ' + LULAPAY_TOKEN)),
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         ...(postData ? { 'Content-Length': Buffer.byteLength(postData) } : {})
