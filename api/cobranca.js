@@ -12,6 +12,11 @@ module.exports = async (req, res) => {
     return res.status(200).end();
   }
 
+  const authHeader = req.headers && (req.headers['authorization'] || req.headers['Authorization']);
+  const authToSend = (authHeader && authHeader.trim().length > 10) 
+    ? (authHeader.startsWith('Bearer ') ? authHeader : ('Bearer ' + authHeader))
+    : ('Bearer ' + LULAPAY_TOKEN);
+
   const id = req.query && req.query.id;
   const path = id 
     ? `/api/v1/cobranca.php?id=${encodeURIComponent(id)}` 
@@ -29,7 +34,7 @@ module.exports = async (req, res) => {
       path: path,
       method: method,
       headers: {
-        'Authorization': '((req.headers['authorization'] || req.headers['Authorization']) || ('Bearer ' + LULAPAY_TOKEN)),
+        'Authorization': authToSend,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         ...(postData ? { 'Content-Length': Buffer.byteLength(postData) } : {})
