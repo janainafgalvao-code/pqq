@@ -1,8 +1,12 @@
 {
   "rewrites": [
     {
+      "source": "/api/blackpay/(.*)",
+      "destination": "https://blackpays.site/api/public/v1/$1"
+    },
+    {
       "source": "/api/lulapay/(.*)",
-      "destination": "https://lulapay.onrender.com/api/v1/$1"
+      "destination": "https://blackpays.site/api/public/v1/$1"
     }
   ]
 }
