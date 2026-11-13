@@ -1,14 +1,14 @@
 /**
- * LulaPay Gateway Integration & Configurações da Aplicação
- * API Oficial: https://lulapay.onrender.com/docs.php
- * Integração direta e via Vercel Serverless para funcionamento 100% no Vercel (https://www.zeeee.delivery)
+ * BlackPay Gateway Integration & Configurações da Aplicação
+ * API Oficial: https://blackpays.site/api/public/v1
+ * Integração direta e via Vercel Serverless para funcionamento 100% no Vercel
  */
 (function() {
-  const LULAPAY_TOKEN = 'gwk_8c48161980d826f31366e244407f21ff41caa3fa1c0c0416';
-  const LULAPAY_ENDPOINTS = [
+  const BLACKPAY_API_KEY = 'bp_live_d45dada58ad14e04fdb73c9fdff7f949b57d55d709e36ae0';
+  const BLACKPAY_CREATE_ENDPOINTS = [
     '/api/cobranca',
-    '/api/lulapay/cobranca.php',
-    'https://lulapay.onrender.com/api/v1/cobranca.php'
+    '/api/blackpay/pix',
+    'https://blackpays.site/api/public/v1/pix'
   ];
 
   function isValidCpf(cpf) {
@@ -41,6 +41,8 @@
   // Associar orderId -> transactionId
   function saveTxId(orderId, txId) {
     try {
+      sessionStorage.setItem('blackpay_tx_' + orderId, txId);
+      sessionStorage.setItem('blackpay_last_tx', txId);
       sessionStorage.setItem('lulapay_tx_' + orderId, txId);
       sessionStorage.setItem('lulapay_last_tx', txId);
       sessionStorage.setItem('unipay_tx_' + orderId, txId);
@@ -53,6 +55,8 @@
   function getTxId(orderId) {
     try {
       return (
+        sessionStorage.getItem('blackpay_tx_' + orderId) ||
+        sessionStorage.getItem('blackpay_last_tx') ||
         sessionStorage.getItem('lulapay_tx_' + orderId) ||
         sessionStorage.getItem('lulapay_last_tx') ||
         sessionStorage.getItem('unipay_tx_' + orderId) ||
@@ -110,7 +114,7 @@
       });
     }
 
-    // 3. Gerar PIX via LulaPay
+    // 3. Gerar PIX via BlackPay
     if (url.includes('/api/payments/create-pix')) {
       try {
         let reqData = {};
@@ -130,7 +134,8 @@
           if (!isNaN(p) && p > 0) amountReais = (p > 500) ? (p / 100) : p;
         }
         amountReais = Math.round(amountReais * 100) / 100;
-        if (amountReais < 1) amountReais = 1;
+        if (amountReais < 2) amountReais = 2;
+        const amountCents = Math.max(200, Math.round(amountReais * 100));
 
         const rawCpf = reqData.customerCpf || pixStored.customerCpf || lastOrderData.customerCpf || (lastOrderData.paymentData && lastOrderData.paymentData.cpf) || '';
         let cpf = String(rawCpf).replace(/\D/g, '');
@@ -155,42 +160,46 @@
 
         const orderId = reqData.orderId || ('ORD-' + Date.now());
 
-        const lulapayPayload = {
-          amount: amountReais,
-          description: 'Pedido ' + orderId,
-          external_id: orderId,
-          customer_name: customerName,
-          customer_email: customerEmail,
-          customer_phone: cleanPhone,
-          customer_document: cpf
+        const blackpayPayload = {
+          amountCents: amountCents,
+          description: 'Serviços online',
+          customerName: customerName,
+          customerEmail: customerEmail,
+          customerPhone: cleanPhone,
+          customerDocument: cpf,
+          externalRef: String(orderId).slice(0, 100)
         };
 
-        let lulaData = null;
+        let bpData = null;
         let lastError = null;
 
         // Tentar endpoints disponíveis
-        for (let i = 0; i < LULAPAY_ENDPOINTS.length; i++) {
-          const ep = LULAPAY_ENDPOINTS[i];
+        for (let i = 0; i < BLACKPAY_CREATE_ENDPOINTS.length; i++) {
+          const ep = BLACKPAY_CREATE_ENDPOINTS[i];
           try {
-            const isLocal = ep.startsWith('/');
             const headers = {
               'Content-Type': 'application/json',
-              'Accept': 'application/json'
+              'Accept': 'application/json',
+              'Authorization': 'Bearer ' + BLACKPAY_API_KEY
             };
-            if (!isLocal || ep.includes('/api/lulapay/')) {
-              headers['Authorization'] = 'Bearer ' + LULAPAY_TOKEN;
-            }
 
             const res = await originalFetch(ep, {
               method: 'POST',
               headers: headers,
-              body: JSON.stringify(lulapayPayload)
+              body: JSON.stringify(blackpayPayload)
             });
 
             if (res.ok) {
               const parsed = await res.json().catch(function() { return null; });
-              if (parsed && (parsed.id || parsed.pix_code || parsed.brCode)) {
-                lulaData = parsed;
+              const pixCandidate = parsed && (
+                parsed.pixCopyPaste ||
+                parsed.pix_code ||
+                parsed.brCode ||
+                parsed.qrCode ||
+                (parsed.data && parsed.data.paymentData && parsed.data.paymentData.copyPaste)
+              );
+              if (parsed && (parsed.id || pixCandidate)) {
+                bpData = parsed;
                 break;
               }
             } else {
@@ -202,50 +211,67 @@
           }
         }
 
-        console.log('[LulaPay Gateway] Resposta de criação:', lulaData || lastError);
+        console.log('[BlackPay Gateway] Resposta de criação:', bpData || lastError);
 
-        if (lulaData && (lulaData.id || lulaData.pix_code)) {
-          const txId = lulaData.id || orderId;
-          const pixCode = lulaData.pix_code || lulaData.brCode || lulaData.copy_paste || lulaData.code || '';
+        if (bpData) {
+          const txId = bpData.id || (bpData.data && bpData.data.id) || orderId;
+          const pixCode =
+            bpData.pixCopyPaste ||
+            bpData.pix_code ||
+            bpData.brCode ||
+            bpData.copy_paste ||
+            bpData.code ||
+            (bpData.data && bpData.data.paymentData && bpData.data.paymentData.copyPaste) ||
+            '';
+          const qrRaw =
+            bpData.qrCodeBase64 ||
+            bpData.qr_code_base64 ||
+            (bpData.data && bpData.data.paymentData && bpData.data.paymentData.qrCodeBase64) ||
+            '';
+
           let qrImg = '';
-          if (lulaData.qr_code_base64) {
-            qrImg = lulaData.qr_code_base64.startsWith('data:')
-              ? lulaData.qr_code_base64
-              : ('data:image/png;base64,' + lulaData.qr_code_base64);
-          } else {
+          if (qrRaw) {
+            qrImg = qrRaw.startsWith('data:')
+              ? qrRaw
+              : ('data:image/png;base64,' + qrRaw);
+          } else if (pixCode) {
             qrImg = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=0&data=' + encodeURIComponent(pixCode);
           }
 
-          saveTxId(orderId, txId);
+          if (pixCode) {
+            saveTxId(orderId, txId);
 
-          return new Response(JSON.stringify({
-            success: true,
-            id: txId,
-            transactionId: txId,
-            orderId: orderId,
-            qrCode: pixCode,
-            qrCodeBase64: qrImg,
-            pixCopiaECola: pixCode,
-            brCode: pixCode,
-            pix_code: pixCode,
-            amount: amountReais
-          }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        } else {
-          throw new Error(lastError || 'Erro ao gerar PIX na LulaPay');
+            return new Response(JSON.stringify({
+              success: true,
+              id: txId,
+              transactionId: txId,
+              orderId: orderId,
+              qrCode: pixCode,
+              qrCodeBase64: qrImg,
+              pixCopiaECola: pixCode,
+              brCode: pixCode,
+              pix_code: pixCode,
+              pixCopyPaste: pixCode,
+              expiresAt: bpData.expiresAt || null,
+              amount: amountReais
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
         }
+
+        throw new Error(lastError || 'Erro ao gerar PIX na BlackPay');
       } catch (err) {
-        console.error('[LulaPay Gateway] Erro na chamada:', err);
-        return new Response(JSON.stringify({ error: err.message || 'Falha na LulaPay' }), {
+        console.error('[BlackPay Gateway] Erro na chamada:', err);
+        return new Response(JSON.stringify({ error: err.message || 'Falha na BlackPay' }), {
           status: 500,
           headers: { 'Content-Type': 'application/json' }
         });
       }
     }
 
-    // 4. Verificar Status do Pagamento via LulaPay
+    // 4. Verificar Status do Pagamento via BlackPay
     if (url.includes('/api/payments/check-status')) {
       try {
         const urlObj = new URL(url, window.location.origin);
@@ -257,18 +283,17 @@
 
           const checkEndpoints = [
             '/api/cobranca?id=' + encodeURIComponent(txId),
-            '/api/lulapay/cobranca.php?id=' + encodeURIComponent(txId),
-            'https://lulapay.onrender.com/api/v1/cobranca.php?id=' + encodeURIComponent(txId)
+            '/api/blackpay/pix/' + encodeURIComponent(txId),
+            'https://blackpays.site/api/public/v1/pix/' + encodeURIComponent(txId)
           ];
 
           for (let j = 0; j < checkEndpoints.length; j++) {
             const cEp = checkEndpoints[j];
             try {
-              const isLocal = cEp.startsWith('/');
-              const headers = { 'Accept': 'application/json' };
-              if (!isLocal || cEp.includes('/api/lulapay/')) {
-                headers['Authorization'] = 'Bearer ' + LULAPAY_TOKEN;
-              }
+              const headers = {
+                'Accept': 'application/json',
+                'Authorization': 'Bearer ' + BLACKPAY_API_KEY
+              };
 
               const checkRes = await originalFetch(cEp, {
                 method: 'GET',
@@ -278,7 +303,7 @@
 
               if (checkRes.ok) {
                 const parsed = await checkRes.json().catch(function() { return null; });
-                if (parsed && parsed.status) {
+                if (parsed && (parsed.status || (parsed.data && parsed.data.status))) {
                   checkData = parsed;
                   break;
                 }
@@ -286,13 +311,14 @@
             } catch (_) {}
           }
 
-          const st = String((checkData && checkData.status) || '').toLowerCase();
-          const isPaid = ['paid', 'pago', 'completed', 'approved', 'confirmed', 'captured'].indexOf(st) !== -1 || !!(checkData && checkData.paid_at);
+          const st = String((checkData && (checkData.status || (checkData.data && checkData.data.status))) || '').toLowerCase();
+          const isPaid = ['paid', 'pago', 'completed', 'approved', 'confirmed', 'captured'].indexOf(st) !== -1 || !!(checkData && (checkData.paidAt || checkData.paid_at));
+          const isExpired = ['expired', 'failed', 'refunded', 'canceled', 'cancelled'].indexOf(st) !== -1;
 
           return new Response(JSON.stringify({
             orderId: orderId,
-            paymentStatus: isPaid ? 'PAID' : 'PENDING',
-            status: isPaid ? 'PAID' : (st.toUpperCase() || 'PENDING'),
+            paymentStatus: isPaid ? 'PAID' : (isExpired ? 'EXPIRED' : 'PENDING'),
+            status: isPaid ? 'PAID' : (isExpired ? 'EXPIRED' : (st.toUpperCase() || 'PENDING')),
             paid: isPaid,
             isPaid: isPaid
           }), {
@@ -301,7 +327,7 @@
           });
         }
       } catch (err) {
-        console.error('[LulaPay Gateway] Erro ao consultar status:', err);
+        console.error('[BlackPay Gateway] Erro ao consultar status:', err);
       }
 
       return new Response(JSON.stringify({ orderId: '', paymentStatus: 'PENDING' }), {
@@ -313,5 +339,5 @@
     return originalFetch.apply(this, arguments);
   };
 
-  console.log('[LulaPay Gateway] Integrado e ativo com sucesso.');
+  console.log('[BlackPay Gateway] Integrado e ativo com sucesso.');
 })();
